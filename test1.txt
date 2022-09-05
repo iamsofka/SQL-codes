@@ -1,0 +1,114 @@
+1. pg_restore -f db.sql
+
+2. 
+1)
+ALTER TABLE customers
+    SET SCHEMA s20946_cust;
+ALTER TABLE customer_customer_demo
+    SET SCHEMA s20946_cust;
+ALTER TABLE customer_demographics
+    SET SCHEMA s20946_cust;
+
+create role Customer_editor;
+grant connect on database "Test" to Customer_editor;
+grant usage on schema c20946_cust to Customer_editor;
+grant select, update, insert, delete on all tables in schema s20946_cust to Customer_editor;
+
+2)
+create role ExternalClient;
+grant connect on database "Test" TO ExternalClient;
+grant usage on schema s20946_war TO ExternalClient;
+grant select on table s20946_war.orders, s20946_war.order_details, s20946_war.products to ExternalClient;
+
+create policy task22 on s20946_war.orders TO ExternalClient using(customer_id='VINET');
+
+3)
+ALTER TABLE orders
+    SET SCHEMA s20946_war;
+ALTER TABLE shippers
+    SET SCHEMA s20946_war;
+ALTER TABLE order_details
+    SET SCHEMA s20946_war;
+ALTER TABLE products
+    SET SCHEMA s20946_war;
+ALTER TABLE suppliers
+    SET SCHEMA s20946_war;
+ALTER TABLE categories
+    SET SCHEMA s20946_war;
+
+create role Warehouse_editor;
+grant connect on database "Test" to Warehouse_editor;
+grant usage on schema s20946_war to Warehouse_editor;
+grant select, update, insert on all tables in schema s20946_war to Warehouse_editor;
+
+
+3. 
+create or replace procedure add_order_item(
+ 	order_id int,
+ 	product_id int,
+ 	unit_price real,
+ 	quantity int
+	) as
+$$
+declare
+  test_order_id int;
+  test_ship_date date;
+  test_prod_id int;
+  new_disc real;
+ begin
+  select into test_order_id o.order_id from orders o where o.order_id = order_id;
+  
+  if test_order_id is null then
+   raise exception 'order id does not exist';
+  end if;
+  
+  select into test_ship_date o.shipped_date from orders o where o.order_id = order_id;
+  if test_ship_date is not null then
+   raise exception 'order is already shipped';
+  end if;
+  
+  select into test_prod_id p.product_id from products p where p.product_id = product_id;
+  if test_prod_id is null then
+   raise exception 'product does not exist';
+  end if;
+  
+  if quantity < 50 then
+   new_disc := 0;
+  else if qunatity < 100 then
+   new_disc := 0.1;
+  else
+   new_disc := 20946 % 61;
+  end if;
+  
+  insert into order_details(order_id, product_id, unit_price, quantity, discount)
+  values (order_id, product_id, unit_price, quantity, calc_disc);
+ end;
+$$ language SQL;
+
+
+4.
+create unique index on customers(customer_id);
+create unique index on employees(employee_id);
+create unique index on shippers(shipper_id);
+create index last_indx on employees(last_name);
+create index freight_indx on orders2(freight);
+create index shipped_indx on orders2(shipped_date desc);
+create index cusId_indx on orders2(customer_id);
+create index empId_indx on orders2(employee_id);
+create index ship_indx on orders2(ship_via);
+
+the query can be optimized by the index-only technique, it was checked using the analyse while running the query.
+
+5.
+create index cusId_indx on orders2(customer_id);
+create index shipN_indx on orders2(ship_name);
+create index freight_indx on orders2(freight);
+
+6.1 
+select * 
+from history 
+where data :: jsonb @> '{ship_city: “Lyon”, customer_id: “VICTE”}';
+6.2
+select * 
+from history 
+where data->'freight' :: int > 40;
